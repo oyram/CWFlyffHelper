@@ -48,8 +48,8 @@ class CwflyffhelperApp:
     def __init__(self, master=None):
         # build ui
         self.toplevel = tk.Tk() if master is None else tk.Toplevel(master)
-        icon = tk.PhotoImage(file = 'E:\GitHub\CWFlyffHelper\source\CWFlyff.ico')
-        self.toplevel.iconphoto(False, icon)
+        # icon = tk.PhotoImage(file = 'E:\GitHub\CWFlyffHelper\source\CWFlyff.ico')
+        # self.toplevel.iconphoto(False, icon)
         self.frameWindowMover = ttk.Frame(self.toplevel)
         self.listboxOpenWindows = tk.Listbox(self.frameWindowMover, width='35', height='14', selectmode=tk.SINGLE)
         self.listboxOpenWindows.grid(column='0', columnspan='2', padx='10', pady='10', row='0')
