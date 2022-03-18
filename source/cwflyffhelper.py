@@ -1,24 +1,25 @@
+from turtle import bgcolor
 import pygetwindow as win
-import PySimpleGUI as gui
+# import PySimpleGUI as gui
 import subprocess # used to launch game
 import sys # used to launch game
 # import os # used to launch game
+import configparser
 
 import os.path
 
-from screeninfo import get_monitors
+# from screeninfo import get_monitors
  
-for monitor in get_monitors():
-    width = monitor.width
-    height = monitor.height
+# for monitor in get_monitors():
+#     width = monitor.width
+#     height = monitor.height
  
-    print(str(width) + 'x' + str(height))
-    print(monitor.name)
+#     print(str(width) + 'x' + str(height))
+#     print(monitor.name)
 
 # titles = win.getAllTitles()
 
 # gui.Window(title="Window positioner", layout=[[]], margins=(100, 50)).read()
-
 
 # ini saves:
 # editor for all ini settings: on/off/value or keep whats in the file (do nothing/skip)
@@ -26,181 +27,301 @@ for monitor in get_monitors():
 # launch game with presets
 # launch patcher (to update the game)
 
-gui.theme("DarkGrey4")
+import pathlib
+import pygubu
+import tkinter as tk
+import tkinter.ttk as ttk
+from pygubu.widgets.pathchooserinput import PathChooserInput
 
-launch_game_column = [
-    [gui.Text("Game Folder Path")],
-    [gui.InputText(size=(35,5), key="-GAME_PATH-", default_text="F:\Spiele\Installiert\ClockworksFlyff")],
-    [gui.Button("Launch Game", key="-LAUNCH_NEUZ-"), gui.Button("Launch Patcher", key="-LAUNCH_PATCHER-")]
-]
+PROJECT_PATH = pathlib.Path(__file__).parent
+PROJECT_UI = PROJECT_PATH / "CWFlyffHelper.ui"
 
-ini_change_column = [
-    [gui.Text("Apply neuz.ini preset:")],
-    [gui.Button("Low", key="-MIN_INI_SETTINGS-", size=(15,2)), gui.Button("Medium", key="-MED_INI_SETTINGS-", size=(15,2)), gui.Button("Main Window", key="-MAIN_INI_SETTINGS-", size=(15,2))]
-]
+#incomplete. 3rd column in treeview with suggestions / min and max values; i.e. tooltips
+# iniValues = ["1920 1080", "0=no,1=yes", "2=low, 1=mid, 0=high", "2=low, 1=mid, 0=high",
+            # "2=low, 1=mid, 0=high", "2=low, 1=mid, 0=high", "2=low, 1=mid, 0=high", 
+            # "0=off?", "255", "???"]
 
-window_list_column = [
+# os.getpid()
+# os.setpriority()
 
-    [
+class CwflyffhelperApp:
+    def __init__(self, master=None):
+        # build ui
+        self.toplevel = tk.Tk() if master is None else tk.Toplevel(master)
+        icon = tk.PhotoImage(file = 'E:\GitHub\CWFlyffHelper\source\CWFlyff.ico')
+        self.toplevel.iconphoto(False, icon)
+        self.frameWindowMover = ttk.Frame(self.toplevel)
+        self.listboxOpenWindows = tk.Listbox(self.frameWindowMover, width='35', height='14', selectmode=tk.SINGLE)
+        self.listboxOpenWindows.grid(column='0', columnspan='2', padx='10', pady='10', row='0')
+        self.listboxOpenWindows.bind('<<ListboxSelext>>', self.refreshlistboxOpenWindows)
+        self.entryFilterOpenWindows = ttk.Entry(self.frameWindowMover, width='35')
+        self.entryFilterOpenWindows.grid(column='0', columnspan='2', padx='5', pady='5', row='1')
+        self.buttonRefreshlistboxOpenWindows = ttk.Button(self.frameWindowMover, command=self.refreshlistboxOpenWindows)
+        self.buttonRefreshlistboxOpenWindows.configure(text='Refresh List', width='35')
+        self.buttonRefreshlistboxOpenWindows.grid(column='0', padx='5', pady='5', row='2', columnspan='2')
+        self.buttonTopLeft = ttk.Button(self.frameWindowMover, command=self.buttonTopLeft)
+        self.buttonTopLeft.configure(text='Top Left', width='15')
+        self.buttonTopLeft.grid(column='0', padx='5', pady='5', row='3')
+        self.buttonTopRight = ttk.Button(self.frameWindowMover, command=self.buttonTopRight)
+        self.buttonTopRight.configure(text='Top Right', width='15')
+        self.buttonTopRight.grid(column='1', padx='5', pady='5', row='3')
+        self.buttonBottomLeft = ttk.Button(self.frameWindowMover, command=self.buttonBottomLeft)
+        self.buttonBottomLeft.configure(text='Bottom Left', width='15')
+        self.buttonBottomLeft.grid(column='0', padx='5', pady='5', row='4')
+        self.buttonBottomRight = ttk.Button(self.frameWindowMover, command=self.buttonBottomRight)
+        self.buttonBottomRight.configure(text='Bottom Right', width='15')
+        self.buttonBottomRight.grid(column='1', padx='5', pady='5', row='4')
+        self.frameWindowMover.configure(height='200', padding='10', width='200')
+        self.frameWindowMover.grid(column='0', row='0', columnspan='2')
+        self.frameIniSettings = ttk.Frame(self.toplevel)
+        self.treeviewIniSettings = ttk.Treeview(self.frameIniSettings, column=("c1", "c2"), show='headings', selectmode='browse')
+        self.treeviewIniSettings.column("# 1", anchor=tk.CENTER, stretch=tk.NO)#, width=35)
+        self.treeviewIniSettings.heading("# 1", text="Setting")
+        self.treeviewIniSettings.column("# 2", anchor=tk.CENTER, stretch=tk.NO)#, width=10)
+        self.treeviewIniSettings.heading("# 2", text="Value")
+        self.scrollbarTreeView = ttk.Scrollbar(self.frameIniSettings, orient ="vertical", command = self.treeviewIniSettings.yview)
+        # self.scrollbarTreeView.configure(command=self.treeviewIniSettings.yview) 
+        # self.scrollbarTreeView.pack(side ='right', fill ='x')
+        self.scrollbarTreeView.grid(column='4', row='0', sticky='nsew')
+        self.treeviewIniSettings.configure(yscrollcommand=self.scrollbarTreeView.set) 
+        self.treeviewIniSettings.grid(column='2', columnspan='2', padx='5', pady='5', row='0')
+        self.treeviewIniSettings.bind('<<TreeviewSelect>>', self.event_treeviewIniSettings)
+        self.entryIniSetting = ttk.Entry(self.frameIniSettings)
+        self.entryIniSetting.grid(column='2', padx='5', pady='5', row='1')
+        self.buttonEditIniSetting = ttk.Button(self.frameIniSettings)
+        self.buttonEditIniSetting.configure(text='Edit Row', command=self.edittreeviewIniSettings)
+        self.buttonEditIniSetting.grid(column='3', padx='5', pady='5', row='4')
+        self.buttonSaveIniPreset = ttk.Button(self.frameIniSettings)
+        self.buttonSaveIniPreset.configure(text='Save Preset')
+        self.buttonSaveIniPreset.grid(column='3', padx='5', pady='5', row='2')
+        self.buttonApplyIniPreset = ttk.Button(self.frameIniSettings, command=self.copyTreeviewToIni)
+        self.buttonApplyIniPreset.configure(text='Apply (without saving)')
+        self.buttonApplyIniPreset.grid(column='2', columnspan='2', padx='5', pady='5', row='1', sticky='e')
+        self.buttonLoadIniPreset = ttk.Button(self.frameIniSettings)
+        self.buttonLoadIniPreset.configure(text='Load Preset')
+        self.buttonLoadIniPreset.grid(column='3', padx='5', pady='5', row='3')
+        self.comboboxLoadIniPreset = ttk.Combobox(self.frameIniSettings)
+        self.comboboxLoadIniPreset.grid(column='2', padx='5', pady='5', row='3')
+        self.comboboxSaveIniPreset = ttk.Combobox(self.frameIniSettings)
+        self.comboboxSaveIniPreset.grid(column='2', padx='5', pady='5', row='2')
+        self.frameIniSettings.configure(height='200', padding='10', width='200')
+        self.frameIniSettings.grid(column='2', columnspan='2', padx='10', pady='10', row='0')
+        self.frameLauncher = ttk.Frame(self.toplevel)
+        self.pathchooserinputGameFolder = PathChooserInput(self.frameLauncher) # seems like you can't change the width of the ttk.entry within this pygubu.widgets.pathchooserinput :( maybe find a solution in tk instead
+        self.pathchooserinputGameFolder.configure(initialdir='F:\Spiele\Installiert\ClockworksFlyff', path='F:\Spiele\Installiert\ClockworksFlyff', type='directory')
+        self.pathchooserinputGameFolder.grid(column='5', columnspan='2', row='0')
+        self.buttonLaunchGame = ttk.Button(self.frameLauncher, command=self.launchGame)
+        self.buttonLaunchGame.configure(text='Launch Game')
+        self.buttonLaunchGame.grid(column='5', padx='5', pady='5', row='1')
+        self.buttonLaunchPatcher = ttk.Button(self.frameLauncher, command=self.buttonLaunchPatcher)
+        self.buttonLaunchPatcher.configure(text='Launch Patcher')
+        self.buttonLaunchPatcher.grid(column='6', padx='5', pady='5', row='1')
+        self.buttonLowIniPreset = ttk.Button(self.frameLauncher, command=self.setLowIniPreset)
+        self.buttonLowIniPreset.configure(text='Low Settings')
+        self.buttonLowIniPreset.grid(column='5', padx='5', pady='5', row='2')
+        self.buttonMidIniPreset = ttk.Button(self.frameLauncher, command=self.setMidIniPreset)
+        self.buttonMidIniPreset.configure(text='Mid Settings')
+        self.buttonMidIniPreset.grid(column='5', padx='5', pady='5', row='3')
+        self.buttonHighIniPreset = ttk.Button(self.frameLauncher, command=self.setHighIniPreset)
+        self.buttonHighIniPreset.configure(text='High Settings')
+        self.buttonHighIniPreset.grid(column='5', padx='5', pady='5', row='4')
+        self.frameLauncher.configure(height='200', padding='10', width='200')
+        self.frameLauncher.grid(column='5', padx='10', pady='10', row='0', columnspan='2')
+        self.toplevel.geometry('1000x400')
+        self.toplevel.maxsize(1000, 400)
+        self.toplevel.minsize(1000, 400)
+        self.toplevel.resizable(False, False)
+        self.toplevel.title('CWFlyffHelper')
+        self.config = configparser.ConfigParser(allow_no_value=True,delimiters=(' ',), comment_prefixes=('//')) # set space as delimiter instead of =; set // as comments because neuz.ini requires these comments/headers
+        self.config.optionxform = str # fix for case-(in)sensitivity
 
-        gui.Text("Select Window:"),
+        # Main widget
+        self.mainwindow = self.toplevel
 
-        # gui.In(size=(25, 1), enable_events=True, key="-TITLES-"),
-        gui.Button("Refresh", key="-REFRESH-")
+    def buttonTopLeft(self):
+        selectedWindowTitle = app.listboxOpenWindows.get(app.listboxOpenWindows.curselection())
+        # print(app.listboxOpenWindows.focus())
+        selectedWindow = win.getWindowsWithTitle(selectedWindowTitle)[0]
+        w = selectedWindow.width
+        h = selectedWindow.height
+        selectedWindow.moveTo(-8, 0)
+    
+    def buttonTopRight(self):
+        selectedWindowTitle = app.listboxOpenWindows.get(app.listboxOpenWindows.curselection())
+        # print(app.listboxOpenWindows.focus())
+        selectedWindow = win.getWindowsWithTitle(selectedWindowTitle)[0]
+        w = selectedWindow.width
+        h = selectedWindow.height
+        selectedWindow.moveTo(2560-w+8, 0)
 
-    #     gui.FolderBrowse(),
+    def buttonBottomLeft(self):
+        selectedWindowTitle = app.listboxOpenWindows.get(app.listboxOpenWindows.curselection())
+        # print(app.listboxOpenWindows.focus())
+        selectedWindow = win.getWindowsWithTitle(selectedWindowTitle)[0]
+        w = selectedWindow.width
+        h = selectedWindow.height
+        selectedWindow.moveTo(-8, 1440-h-32)
 
-    ],
+    def buttonBottomRight(self):
+        selectedWindowTitle = app.listboxOpenWindows.get(app.listboxOpenWindows.curselection())
+        # print(app.listboxOpenWindows.focus())
+        selectedWindow = win.getWindowsWithTitle(selectedWindowTitle)[0]
+        w = selectedWindow.width
+        h = selectedWindow.height
+        selectedWindow.moveTo(2560-w+8, 1440-h-32)
 
-    [
+    def launchGame(self):
+        launchNeuzCommand = "cd /D " + self.pathchooserinputGameFolder.cget('path') + " && start Neuz.exe"
+        subprocess.run(launchNeuzCommand, shell=True)
 
-        gui.Listbox(
+    def buttonLaunchPatcher(self):
+        launchFlyffCommand = "cd /D " + self.pathchooserinputGameFolder.cget('path') + " && start Flyff.exe"
+        subprocess.run(launchFlyffCommand, shell=True)
 
-            values=[], enable_events=True, size=(40, 20), key="-WINDOW_LIST-"
-
-        )
-
-    ],
-
-]
-
-image_viewer_column = [
-
-    # [gui.Text(size=(40, 1), key="-TOUT-")],
-
-    # [gui.Image(key="-IMAGE-")],
-    [gui.Text("Quick Snap (Main Monitor, 8 pixel offset):")],
-    [gui.Button("Top Left", key="-TOPLEFT-", size=(20, 2)), gui.Button("Top Right", key="-TOPRIGHT-", size=(20, 2))],
-    [gui.Button("Bottom Left", key="-BOTTOMLEFT-", size=(20, 2)), gui.Button("Bottom Right", key="-BOTTOMRIGHT-", size=(20, 2))],
-
-    [gui.Text("Manually enter coordinates:")],
-
-    [gui.InputText(size=(10,5), key="-XCOORD-"), gui.InputText(size=(10,5), key="-YCOORD-"),gui.Button("Move", key="-MOVE-")]
-
-]
-
-# third_column = [
-#     [gui.Button("Top Right", key="-TOPRIGHT-")],
-#     [gui.Button("Bottom Right", key="-BOTTOMRIGHT-")]
-
-# ]
-
-layout = [
-
-    [
-
-        gui.Column(window_list_column),
-
-        gui.VSeperator(),
-
-        gui.Column(image_viewer_column),
-
-        gui.VSeperator(),
-        
-        gui.Column(launch_game_column),
-
-        # gui.HSeperator(),
-
-        # gui.Column(ini_change_column)
-
-    ]
-
-]
-
-window = gui.Window("Window positioner", layout)
-
-
-# Run the Event Loop
-
-while True:
-
-    event, values = window.read()
-
-    if event == "Exit" or event == gui.WIN_CLOSED:
-
-        break
-
-    # Folder name was filled in, make a list of files in the folder
-
-    if event == "-REFRESH-":
-
+    def refreshlistboxOpenWindows(self):
+        self.listboxOpenWindows.delete(0,tk.END)
+        filtertext = self.entryFilterOpenWindows.get()
         titles = win.getAllTitles()
-        fixedTitles = []
-        for t in titles:
-            if t != '':
-                fixedTitles.append(t)
-        window["-WINDOW_LIST-"].update(fixedTitles)
+        titles.sort()
+        if(filtertext == ''):
+            for t in titles:
+                if t.__contains__("Clockworks Flyff"):
+                    self.listboxOpenWindows.insert('end', t)
+        else:
+            for t in titles:
+                if t.__contains__(filtertext):
+                    self.listboxOpenWindows.insert('end', t)
+    
 
-    elif event == "-TOPLEFT-":
-        try:
-            selectedWindowTitle = values["-WINDOW_LIST-"][0]
-            selectedWindow = win.getWindowsWithTitle(selectedWindowTitle)[0]
-            w = selectedWindow.width
-            h = selectedWindow.height
-            # selectedWindow.moveTo(int("-XCOORD-")+1972, int("-YCOORD-"))
-            # selectedWindow.moveTo(1972, 0)
-            selectedWindow.moveTo(-8, 0)
-        except:
-            pass
+    def event_treeviewIniSettings(self, event):
+        self.entryIniSetting.delete(0, 'end')
+        self.entryIniSetting.insert(0, self.treeviewIniSettings.item(self.treeviewIniSettings.focus())['values'][1])
 
-    elif event == "-TOPRIGHT-":
-        try:
-            selectedWindowTitle = values["-WINDOW_LIST-"][0]
-            selectedWindow = win.getWindowsWithTitle(selectedWindowTitle)[0]
-            w = selectedWindow.width
-            h = selectedWindow.height
-            selectedWindow.moveTo(2560-w+8, 0)
-            print(w)
-            print(2560-w)
-        except:
-            pass
+    def edittreeviewIniSettings(self):
+        selected_item = self.treeviewIniSettings.selection()[0]
+        self.treeviewIniSettings.item(selected_item, values=[self.treeviewIniSettings.item(selected_item)['values'][0], self.entryIniSetting.get()]) # keep left column the same and edit the second column
+    
+    def parseNeuzIni(self):
+        neuzIniPath = self.pathchooserinputGameFolder.cget('path') + r'\neuz.ini' # maybe have as a class variable instead that updates whenever the path is changed
+        with open(neuzIniPath) as stream:
+            self.config.read_string('[SECTION_FOR_CONFIGPARSER]\n' + stream.read())
+        # print(self.config.items)
+        for item in self.treeviewIniSettings.get_children():
+            self.treeviewIniSettings.delete(item)
+        counter = 0
+        for key in self.config["SECTION_FOR_CONFIGPARSER"]:
+            self.treeviewIniSettings.insert(parent = '', index=counter, values=[key, self.config["SECTION_FOR_CONFIGPARSER"][key]])
+            # print(key + ", " + self.config["SECTION_FOR_CONFIGPARSER"][key])
+            counter += 1
+        self.treeviewIniSettings.update()
 
-    elif event == "-BOTTOMLEFT-":
-        try:
-            selectedWindowTitle = values["-WINDOW_LIST-"][0]
-            selectedWindow = win.getWindowsWithTitle(selectedWindowTitle)[0]
-            w = selectedWindow.width
-            h = selectedWindow.height
-            selectedWindow.moveTo(-8, 1440-h-32)
-        except:
-            pass
+    def copyTreeviewToIni(self):
+        for item in self.treeviewIniSettings.get_children():
+            self.config.set("SECTION_FOR_CONFIGPARSER", self.treeviewIniSettings.item(item)['values'][0], str(self.treeviewIniSettings.item(item)['values'][1]))
+        self.writeIni()
 
-    elif event == "-BOTTOMRIGHT-":
-        try:
-            selectedWindowTitle = values["-WINDOW_LIST-"][0]
-            selectedWindow = win.getWindowsWithTitle(selectedWindowTitle)[0]
-            w = selectedWindow.width
-            h = selectedWindow.height
-            selectedWindow.moveTo(2560-w+8, 1440-h-32)
-        except:
-            pass
+    def setLowIniPreset(self):
+        # self.parseNeuzIni()
+        #SETTING 0
+        self.config.set("SECTION_FOR_CONFIGPARSER", "resolution", "800 600")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "fullscreen", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "texture", "2")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "view", "2")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "detail", "2")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "distant", "2")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "shadow", "2")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "DamageRender", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "BuffTimeRender", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "SFXRenderOff", "1")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "PRenderName", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "OPRenderName", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "NRenderName", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "POWERUPICONSPERROW", "5")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "DisableBuff", "1")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "HideOwnPet", "1")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "SFXLEVEL", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "WEATHEREFFECT", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "WeaponGlow", "1")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "SetGlow", "1")
+        self.writeIni()
+        self.launchGame()
+    def setMidIniPreset(self):
+        # self.parseNeuzIni()
+        #SETTING 1
+        self.config.set("SECTION_FOR_CONFIGPARSER", "resolution", "1280 800")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "fullscreen", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "texture", "2")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "view", "2")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "detail", "2")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "distant", "2")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "shadow", "2")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "DamageRender", "1")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "BuffTimeRender", "1")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "SFXRenderOff", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "PRenderName", "1")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "OPRenderName", "1")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "NRenderName", "1")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "POWERUPICONSPERROW", "12")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "DisableBuff", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "HideOwnPet", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "SFXLEVEL", "5")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "WEATHEREFFECT", "1")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "WeaponGlow", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "SetGlow", "0")
+        self.writeIni()
+        self.launchGame()
+    def setHighIniPreset(self):
+        # self.parseNeuzIni()
+        #SETTING 2 - for now this is not fullscreen anymore because of the new monitor
+        self.config.set("SECTION_FOR_CONFIGPARSER", "resolution", "1920 1080")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "fullscreen", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "texture", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "view", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "detail", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "distant", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "shadow", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "DamageRender", "1")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "BuffTimeRender", "1")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "SFXRenderOff", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "PRenderName", "1")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "OPRenderName", "1")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "NRenderName", "1")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "POWERUPICONSPERROW", "18")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "DisableBuff", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "HideOwnPet", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "SFXLEVEL", "5")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "WEATHEREFFECT", "1")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "WeaponGlow", "0")
+        self.config.set("SECTION_FOR_CONFIGPARSER", "SetGlow", "0")
+        self.writeIni()
+        self.launchGame()
+    
+    def writeIni(self):
+        neuzIniPath = self.pathchooserinputGameFolder.cget('path') + r'\neuz.ini' # maybe have as a class variable instead that updates whenever the path is changed
+        with open(neuzIniPath, 'w') as config_file:
+            self.config.write(config_file,False)
+        config_file.close()
 
-    elif event == "-MOVE-":
+        # remove the section that configparser requires and add the comments/headers that neuz.ini requires back in
+        with open(neuzIniPath, 'r+') as neuz:
+            old = neuz.read()
+            old = old[26:] # remove [SECTION_FOR_CONFIGPARSER] line (could probably be done with neuz.readlines() but honestly, it's working right now and I don't care)
+            neuz.seek(0) # rewind?
+            neuz.write('// neuz browser ini file\n \n//option' + old)
+        neuz.close()
+        self.parseNeuzIni() #after saving, load the new ini and put it into treeview
 
-        try:
-            selectedWindowTitle = values["-WINDOW_LIST-"][0]
-            selectedWindow = win.getWindowsWithTitle(selectedWindowTitle)[0]
-            # selectedWindow.moveTo("-XCOORD-", "-YCOORD-")
-            # selectedWindow.moveTo(int("-XCOORD-"), int("-YCOORD-"))
-            selectedWindow.moveTo("1980", "608")
-            print(selectedWindow)
-        except:
-            print("Could not move window.")
+    def run(self):
+        if self.pathchooserinputGameFolder.cget('path') != '':
+            self.parseNeuzIni()
 
-    elif event == "-LAUNCH_NEUZ-":
-        try:
-            print("Launching Neuz in Folder: ", values["-GAME_PATH-"])
-            launchNeuzCommand = "cd /D " + values["-GAME_PATH-"] + " && start Neuz.exe"
-            subprocess.run(launchNeuzCommand, shell=True)
-        except:
-            pass
+        self.mainwindow.mainloop()
 
-    elif event == "-LAUNCH_PATCHER-":
-        try:
-            print("Launching Flyff Patcher in Folder: ", values["-GAME_PATH-"])
-            launchFlyffCommand = "cd /D " + values["-GAME_PATH-"] + " && start Flyff.exe"
-            subprocess.run(launchFlyffCommand, shell=True)
-        except:
-            pass
 
-window.close()
+if __name__ == '__main__':
+    app = CwflyffhelperApp()
+    app.refreshlistboxOpenWindows()
+    # app.treeviewIniSettings.insert(parent='', index=0, iid=0, text='', values=('Vineet','Alpha'))
+    app.run()
+
+# ini reader: either button or whenever folder path is changed
